@@ -18,7 +18,7 @@ if sys.platform == "win32":
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-SCRIPT_DIR  = Path(__file__).parent
+SCRIPT_DIR = Path(__file__).parent
 CONFIG_FILE = SCRIPT_DIR / "config.json"
 
 DEFAULT_CONFIG = {
@@ -27,53 +27,61 @@ DEFAULT_CONFIG = {
     "recipient_email": "compliance-officer@company.com",
     "email_strategy": "single_emails",
     "scrape_interval_minutes": 10,
-    "anthropic_api_key": "",
+    "ollama_api_key": "",
+    "ollama_model": "",
     "rss_sources": [
         {
             "name": "金管會最新法令函釋",
             "url": "https://www.fsc.gov.tw/RSS/Newlaw?serno=201202290008&language=chinese",
-            "type": "函釋"
+            "type": "函釋",
+            "max_batch": 1
         },
         {
             "name": "金管會法規草案預告",
             "url": "https://www.fsc.gov.tw/RSS/Noticelaw?serno=201202290010&language=chinese",
-            "type": "草案"
+            "type": "草案",
+            "max_batch": 1
         }
     ]
 }
 
+
 def ensure_config() -> dict:
     if not CONFIG_FILE.exists():
         print("[INFO] 找不到 config.json，正在建立預設設定檔...")
-        CONFIG_FILE.write_text(json.dumps(DEFAULT_CONFIG, indent=4, ensure_ascii=False), encoding="utf-8")
+        CONFIG_FILE.write_text(json.dumps(
+            DEFAULT_CONFIG, indent=4, ensure_ascii=False), encoding="utf-8")
         print(f"  ✓ 預設設定檔已建立於：{CONFIG_FILE}")
-        print("  ⚠️ 請開啟 config.json 填寫您的 Gmail 帳號、應用程式密碼與 Anthropic API 金鑰後，再次執行本指令。")
+        print("  ⚠️ 請開啟 config.json 填寫您的 Gmail 帳號、應用程式密碼與 Ollmaa API 金鑰後，再次執行本指令。")
         sys.exit(0)
-        
+
     config = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-    
+
     missing = []
     if config.get("gmail_user") == "your_email@gmail.com" or not config.get("gmail_user"):
         missing.append("gmail_user")
     if config.get("gmail_app_password") == "your_16_digit_app_password" or not config.get("gmail_app_password"):
         missing.append("gmail_app_password")
-    if not config.get("anthropic_api_key"):
-        missing.append("anthropic_api_key")
-        
+    if not config.get("ollama_api_key"):
+        missing.append("ollama_api_key")
+    if not config.get("ollama_model"):
+        missing.append()
+
     if missing:
         print("[ERROR] config.json 中有尚未填寫的必填項目：")
         for m in missing:
             print(f"  - {m}")
         print("請填寫後再次執行 setup.py。")
         sys.exit(1)
-        
+
     return config
 
+
 def register_scheduler(config: dict) -> None:
-    interval  = config.get("scrape_interval_minutes", 10)
+    interval = config.get("scrape_interval_minutes", 10)
     task_name = "ComplianceRadar_Scraper"
-    script    = str(SCRIPT_DIR / "scraper.py")
-    python    = sys.executable
+    script = str(SCRIPT_DIR / "scraper.py")
+    python = sys.executable
 
     if sys.platform == "win32":
         cmd = [
@@ -97,7 +105,9 @@ def register_scheduler(config: dict) -> None:
         # Linux / macOS / Unix
         print(f"  ℹ 偵測到非 Windows 系統 ({sys.platform})，請手動設定 Crontab。")
         print(f"  請執行 `crontab -e` 並加入以下行：")
-        print(f"  */{interval} * * * * \"{python}\" \"{script}\" >> \"{SCRIPT_DIR}/cron.log\" 2>&1")
+        print(
+            f"  */{interval} * * * * \"{python}\" \"{script}\" >> \"{SCRIPT_DIR}/cron.log\" 2>&1")
+
 
 def main():
     print("=" * 60)
@@ -121,6 +131,7 @@ def main():
 📋 接著可執行：
    python scraper.py      （立刻手動測試抓取與發信機制）
 """)
+
 
 if __name__ == "__main__":
     main()
