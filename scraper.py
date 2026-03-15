@@ -5,7 +5,7 @@ scraper.py — 金融合規雷達核心抓取腳本 (RSS-to-Gmail 版)
 1. 讀取 config.json 與 processed_announcements.json
 2. 解析金管會 RSS feeds，找出尚未處理的新公告
 3. 針對每則新公告，爬取原文網頁偵測是否有 PDF/DOC 附件
-4. 呼叫 Claude Sonnet 產生合規重點摘要與草稿 (以 JSON 格式回傳)
+4. 呼叫 Ollama 產生合規重點摘要與草稿 (以 JSON 格式回傳)
 5. 依照 config.json 設定的 email_strategy 寄送 Email 給法遵
    - "single_emails": 每則公告獨立寄出一封含有草稿的 Email。
    - "digest_with_eml": 所有公告彙整成一封信，草稿以 .eml 附件形式夾帶。
@@ -22,7 +22,8 @@ from datetime import datetime, timedelta
 import feedparser
 import requests
 from bs4 import BeautifulSoup
-from anthropic import Anthropic
+from openai import OpenAI
+
 
 import smtplib
 from email.message import EmailMessage
@@ -267,8 +268,8 @@ def create_ics_attachment(res: dict) -> bytes:
 # AI Processing
 # ============================================================================
 
-def process_with_claude(item: dict, client: Anthropic) -> dict:
-    """呼叫 Claude 將法規編寫為 JSON 格式的摘要與草稿"""
+def process_with_ollama(item: dict, client: OpenAI, model: str ) -> dict:
+    f"""呼叫 Ollama {model} 將法規編寫為 JSON 格式的摘要與草稿"""
     print(f"  🤖 正在讓 AI 分析：{item['title']}")
 
     prompt = f"""請扮演專業的台灣金控法遵助理。
@@ -296,15 +297,17 @@ def process_with_claude(item: dict, client: Anthropic) -> dict:
 }}
 """
     try:
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=2500,
+        response = client.chat.completions.create(
+            model=model,
+            max_tokens=8000,
             temperature=0.2,
             messages=[{"role": "user", "content": prompt}]
         )
-        raw_text = response.content[0].text.strip()
-        
-        # 尋找第一個 { 和最後一個 } 之間的內容，解決 Claude 偶爾加入額外說明的問題
+        raw_text = response.choices[0].message.content
+        print(f"  [DEBUG] finish_reason: {response.choices[0].finish_reason}")
+        print(f"  [DEBUG] content type: {type(raw_text)}, value: {repr(raw_text)}")
+        print(f"  [DEBUG] usage: {response.usage}")
+        # 尋找第一個 { 和最後一個 } 之間的內容，解決 Ollama 偶爾加入額外說明的問題
         # 修正：更精確地抓取大括號內容，避免抓到結尾說明的干擾
         import re
         json_match = re.search(r'(\{.*\})', raw_text, re.DOTALL | re.MULTILINE)
@@ -352,7 +355,7 @@ def process_with_claude(item: dict, client: Anthropic) -> dict:
                     }
                 raise
     except Exception as e:
-        print(f"  [ERROR] Claude API 呼叫失敗或 JSON 解析錯誤：{e}")
+        print(f"  [ERROR] Ollama API 呼叫失敗或 JSON 解析錯誤：{e}")
         return None
 
 # ============================================================================
@@ -741,12 +744,15 @@ def main():
     # 檢查報告保存年限
     check_retention_reminder()
 
-    api_key = config.get("anthropic_api_key")
+    api_key = config.get("ollama_api_key")
+    ollama_model = config.get("ollama_model")
     if not api_key:
-        log_run(error="Anthropic API Key 未設定")
-        print("[ERROR] Anthropic API Key 未設定，請檢查 config.json。")
+        log_run(error="Ollama API Key 未設定")
+        print("[ERROR] Ollama API Key 未設定，請檢查 config.json。")
         sys.exit(1)
-
+    if not ollama_model:
+        log_run(error="Ollama model 未設定")
+        print("[ERROR] Ollama model 未設定，請檢查 config.json。")
     new_items = []
     rss_errors = []
 
@@ -756,7 +762,8 @@ def main():
         try:
             response = requests.get(source["url"], timeout=15, verify=False)
             feed = feedparser.parse(response.text)
-
+            max_match = source['max_batch']
+            feed.entries = feed.entries[:max_match]
             print(f"  檢查來源: {source['name']} (取得 {len(feed.entries)} 筆)")
 
             for entry in feed.entries:
@@ -785,14 +792,17 @@ def main():
         sys.exit(0)
         
     print(f"\n[2/3] 發現 {len(new_items)} 則新發布法規，開始進行 AI 分析...")
-    client = Anthropic(api_key=api_key)
+    client = OpenAI(
+        base_url="https://ollama.com/v1",
+        api_key=api_key
+    )
     results = []
     for item in new_items:
         # 深度掃描附件
         item['has_attachments'] = check_for_attachments(item['link'])
 
-        # 呼叫 Claude
-        ai_data = process_with_claude(item, client)
+        # 呼叫 Ollama
+        ai_data = process_with_ollama(item, client, ollama_model)
         if ai_data:
             # 計算生效日期與意見截止日
             effective_date = calculate_effective_date(item['published'], ai_data.get("effective_date_info"))
