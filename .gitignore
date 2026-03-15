@@ -1,0 +1,33 @@
+# Credentials & secrets
+config.json
+config.json.bak
+
+# Runtime state
+processed_announcements.json
+processed_urls.json
+last_run.log
+run_history.jsonl
+reports/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Test files
+run_test_random.py
+test_calendar.py
+
+# Legacy files
+*.ps1
+config.example.json
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
