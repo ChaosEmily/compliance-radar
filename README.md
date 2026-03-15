@@ -25,22 +25,48 @@
 
 ## 監測範圍
 
-預設監測以下金管會 RSS 來源：
+預設監測以下金管會 RSS 來源（首次執行 `setup.py` 時自動寫入 `config.json`）：
 
-| 來源名稱           | 公告類型 | 說明                             |
-| ------------------ | -------- | -------------------------------- |
-| 金管會最新法令函釋 | 函釋     | 已生效或即將生效的法令解釋、規範 |
-| 金管會法規草案預告 | 草案     | 預告中的草案，含意見徵詢截止日   |
+| 來源名稱 | 公告類型 | RSS 網址 | 說明 |
+| -------- | -------- | -------- | ---- |
+| 金管會最新法令函釋（含本會及所屬各局） | 函釋 | `https://www.fsc.gov.tw/RSS/Newlaw?serno=201202290008&language=chinese` | 已生效或即將生效的法令解釋、規範 |
+| 金管會法規草案預告（含本會及所屬各局） | 草案 | `https://www.fsc.gov.tw/RSS/Noticelaw?serno=201202290010&language=chinese` | 預告中的草案，含意見徵詢截止日 |
 
-如需追蹤其他來源（如證期局、保險局專屬 RSS），可在 `config.json` 的 `rss_sources` 陣列中新增項目，格式如下：
+### 新增其他 RSS 來源
+
+如需追蹤其他來源（如證期局、保險局專屬 RSS），開啟 `config.json`，在 `rss_sources` 陣列中新增項目即可。每筆項目包含三個欄位：
+
+| 欄位 | 說明 | 範例 |
+| ---- | ---- | ---- |
+| `name` | 自訂來源名稱，會顯示於信件與報告中 | `"證期局法令函釋"` |
+| `url` | 金管會 RSS 完整網址 | `"https://www.fsc.gov.tw/RSS/Newlaw?serno=..."` |
+| `type` | 公告分類，影響信件前綴與配色（`函釋` 或 `草案`） | `"函釋"` |
+
+範例——在現有兩個來源之後新增一筆：
 
 ```json
 {
-    "name": "來源名稱",
-    "url": "RSS 網址",
-    "type": "函釋"
+    "rss_sources": [
+        {
+            "name": "金管會最新法令函釋",
+            "url": "https://www.fsc.gov.tw/RSS/Newlaw?serno=201202290008&language=chinese",
+            "type": "函釋"
+        },
+        {
+            "name": "金管會法規草案預告",
+            "url": "https://www.fsc.gov.tw/RSS/Noticelaw?serno=201202290010&language=chinese",
+            "type": "草案"
+        },
+        {
+            "name": "其他來源名稱",
+            "url": "https://www.fsc.gov.tw/RSS/xxxxx?serno=xxxxxxxxx&language=chinese",
+            "type": "函釋"
+        }
+    ]
 }
 ```
+
+> **提示**：金管會各局 RSS 網址可至 [金管會 RSS 服務頁面](https://www.fsc.gov.tw/ch/home.jsp?id=128&parentpath=0,4) 查詢。
 
 ## 安裝步驟
 
