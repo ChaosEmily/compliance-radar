@@ -115,7 +115,7 @@ python scraper.py
 | ---- | ---- |
 | `gmail_user` | 發信用 Gmail 帳號 |
 | `gmail_app_password` | Gmail 應用程式密碼（非登入密碼，需至 Google 帳戶設定產生） |
-| `recipient_email` | 法遵部門收件信箱（可不填） |
+| `recipient_email` | 法遵部門收件信箱（可和 gmail_user 相同） |
 | `email_strategy` | `single_emails`（每則獨立寄出，預設）或 `digest`（彙整為一封） |
 | `scrape_interval_minutes` | 排程執行間隔（分鐘），預設 10 |
 | `anthropic_api_key` | Claude API 金鑰 |
