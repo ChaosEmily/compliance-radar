@@ -19,11 +19,19 @@ import time
 from pathlib import Path
 from datetime import datetime, timedelta
 
+import io
 import feedparser
 import requests
+import urllib3
 from bs4 import BeautifulSoup
 from openai import OpenAI
 
+# 金管會 SSL 憑證缺少 Subject Key Identifier，verify=False fallback 時會產生警告
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# Windows 終端預設 cp950，強制 UTF-8 以正確顯示中文 log
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 import smtplib
 from email.message import EmailMessage
@@ -77,6 +85,16 @@ def check_for_attachments(url: str) -> bool:
     except Exception as e:
         print(f"  [WARN] 檢查附件失敗 ({url}): {e}")
         return False
+
+# ============================================================================
+# Sanitize AI Output
+# ============================================================================
+
+def strip_fake_emails(html: str) -> str:
+    """移除 AI 產出的 mailto 連結和假 email 地址"""
+    html = re.sub(r'<a\s+href=["\']mailto:[^"\']*["\'][^>]*>(.*?)</a>', r'\1', html, flags=re.IGNORECASE)
+    html = re.sub(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}', '', html)
+    return html
 
 # ============================================================================
 # Date Utilities
@@ -285,7 +303,7 @@ def process_with_ollama(item: dict, client: OpenAI, model: str ) -> dict:
 {{
     "digest_summary": "對這篇公告的白話文一句話摘要。",
     "draft_subject": "【{item['type']}】AI 合規建議 - {item['title'][:50]}...",
-    "draft_body": "一段 HTML 格式的草稿內文。請確保內容【僅限】通知電子郵件的內文。請使用簡單的 <br> 和 <ul><li> 標籤排版。不要包含 <html> 或 <body> 標籤。",
+    "draft_body": "一段 HTML 格式的草稿內文。請確保內容【僅限】通知電子郵件的內文。請使用簡單的 <br> 和 <ul><li> 標籤排版。不要包含 <html> 或 <body> 標籤。【不要在草稿中放入原文連結，系統會自動附上】。【嚴禁放入任何虛構的 email 地址、電話號碼、會議連結或聯絡資訊，只寫法規內容與合規建議即可】。",
     "effective_date_info": {{
         "type": "exact 或 relative 或 unknown",
         "value": "搜尋標題與內文中的『施行』、『生效』、『會計年度』等關鍵字。exact 範例：'2026.3.27' 或 '115年1月1日'（直接照抄原文日期字串）；relative 範例：'0'（自發布日施行）或 '30'（30日後）；找不到就填 null"
@@ -343,7 +361,7 @@ def process_with_ollama(item: dict, client: OpenAI, model: str ) -> dict:
                     return {
                         "digest_summary": summary_m.group(1).strip(),
                         "draft_subject": subject_m.group(1).strip(),
-                        "draft_body": body_m.group(1).strip(),
+                        "draft_body": strip_fake_emails(body_m.group(1).strip()),
                         "effective_date_info": {
                             "type": eff_type_m.group(1) if eff_type_m else "unknown",
                             "value": eff_val_m.group(1) if eff_val_m and eff_val_m.group(1) != "null" else None
@@ -407,6 +425,7 @@ def dispatch_single_emails(config: dict, results: list) -> bool:
             <h3 style="margin-top: 0;">📊 AI 綜合摘要 ({res['type']})</h3>
             <p><strong>{res['title']}</strong><br/>{res['ai_output']['digest_summary']}</p>
             {attachment_notice}
+            <p><a href="{res['link']}" target="_blank" style="color: #1a73e8;">🔗 查看原文公告</a></p>
         </div>
         <hr/>
         <h3>📝 內部通知草稿 (請確認後直接轉寄本信)</h3>
@@ -459,7 +478,8 @@ def dispatch_digest_with_eml(config: dict, results: list) -> bool:
         item_summary = f"""
         <div style='margin-bottom: 15px; padding: 10px; background: #f0f7ff; border-radius: 5px;'>
             <strong>{idx}. [{res['type']}] {res['title']}</strong><br/>
-            <span style='color: #444;'>{res['ai_output']['digest_summary']}</span>
+            <span style='color: #444;'>{res['ai_output']['digest_summary']}</span><br/>
+            <a href="{res['link']}" target="_blank" style="color: #1a73e8;">🔗 查看原文公告</a>
         </div>
         """
         # 彙整長信的摘要區塊也加入日曆連結
@@ -760,7 +780,10 @@ def main():
     print("[1/3] 正在檢查最新的法令更新...")
     for source in config.get("rss_sources", []):
         try:
-            response = requests.get(source["url"], timeout=15, verify=False)
+            try:
+                response = requests.get(source["url"], timeout=15)
+            except requests.exceptions.SSLError:
+                response = requests.get(source["url"], timeout=15, verify=False)
             feed = feedparser.parse(response.text)
             max_match = source['max_batch']
             feed.entries = feed.entries[:max_match]

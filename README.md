@@ -224,6 +224,42 @@ python scraper.py
 
 ---
 
+## 停止與卸載
+
+### 停止排程執行
+
+若已透過 `setup.py` 註冊 Windows 工作排程器，請以**系統管理員身分**開啟終端執行：
+
+```bash
+schtasks /delete /tn "ComplianceRadar_Scraper" /f
+```
+
+Linux / macOS 使用者請執行 `crontab -e`，移除對應的排程行。
+
+> **注意**：若未曾執行 `setup.py` 或排程註冊失敗，則無排程任務需要移除。手動執行的 `python scraper.py` 僅為一次性執行，關閉終端或按 `Ctrl+C` 即可中止。
+
+### 完整卸載
+
+1. **移除排程任務**（同上步驟）
+
+2. **撤銷敏感憑證**（建議）
+   - 至 [Google 應用程式密碼管理](https://myaccount.google.com/apppasswords) 撤銷 `config.json` 中的 Gmail App Password
+   - 至 Ollama 平台撤銷對應的 API Key
+
+3. **刪除專案資料夾**
+
+   ```bash
+   # Windows (PowerShell)
+   Remove-Item -Recurse -Force "d:\Projects\compliance-radar"
+
+   # Linux / macOS
+   rm -rf ~/compliance-radar
+   ```
+
+4. **確認清除完成**：專案不會在系統其他位置留下檔案。所有設定（`config.json`）、狀態（`processed_announcements.json`）、報告（`reports/`）與執行紀錄（`run_history.jsonl`）皆存放於專案資料夾內。
+
+---
+
 ## 替換 AI 模型後的錯誤問題
 
 **日期**: 2026-03-16 | **診斷耗時**: 30 分鐘 | **狀態**: 待決定修復方案
